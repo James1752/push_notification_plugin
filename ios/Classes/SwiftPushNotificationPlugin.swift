@@ -7,8 +7,9 @@ public class SwiftPushNotificationPlugin: NSObject, FlutterPlugin, UNUserNotific
     var _channel: FlutterMethodChannel
 
     var _resumeFromBackground:Bool;
+    var _clearNotificationsOnApplicationBecomeActive:Bool;
     var _launchNotification: [AnyHashable : Any]?;
- 
+
     public static func register(with registrar: FlutterPluginRegistrar) {
         let channel = FlutterMethodChannel(name: "com.bluechilli.plugins/push_notification", binaryMessenger: registrar.messenger())
         let instance = SwiftPushNotificationPlugin(channel: channel)
@@ -30,27 +31,31 @@ public class SwiftPushNotificationPlugin: NSObject, FlutterPlugin, UNUserNotific
         case "setupCategories":
             setupCategories(call: call, result: result);
             break;
+        case "reduceBadge":
+            reduceBadge(call: call, result: result);
+            break;
         default:
             result(FlutterMethodNotImplemented)
             break;
-            
+
         }
-        
+
     }
 
     init(channel:FlutterMethodChannel){
         _channel = channel
         _resumeFromBackground = false;
+        _clearNotificationsOnApplicationBecomeActive = true;
         super.init()
     }
-    
+
     // Mark: - UserNotificationCenter Delegate
 
     @available(iOS 10.0, *)
     public func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
-        
+
         var action:String = "";
-        
+
         switch(response.actionIdentifier) {
             case UNNotificationDefaultActionIdentifier:
                 action = "default";
@@ -62,7 +67,7 @@ public class SwiftPushNotificationPlugin: NSObject, FlutterPlugin, UNUserNotific
                 action = response.actionIdentifier;
                 break;
         };
-        
+
         let res:NSDictionary = [
                 "action": action,
                 "data":  getParamters(userInfo: response.notification.request.content.userInfo)
@@ -70,61 +75,64 @@ public class SwiftPushNotificationPlugin: NSObject, FlutterPlugin, UNUserNotific
         _channel.invokeMethod("onOpened", arguments: res);
         completionHandler();
     }
-    
-    
+
+
     @available(iOS 10.0, *)
     public func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
         _channel.invokeMethod("onResume", arguments: getParamters(userInfo: notification.request.content.userInfo));
         completionHandler(.alert);
     }
-    
-    
+
+
     // Mark: - Application Delegate
-    
+
     public func application(_ application: UIApplication, didFinishLaunchingWithOptions launchOptions: [AnyHashable : Any] = [:]) -> Bool {
 
         _launchNotification = launchOptions[UIApplication.LaunchOptionsKey.remoteNotification] as? [AnyHashable : Any];
-        
+
         return true;
     }
-    
+
     public func applicationDidEnterBackground(_ application: UIApplication) {
         _resumeFromBackground = true;
     }
-    
+
     public func applicationDidBecomeActive(_ application: UIApplication) {
         _resumeFromBackground = false;
-        application.applicationIconBadgeNumber = 1;
-        application.applicationIconBadgeNumber = 0;
+        if(_clearNotificationsOnApplicationBecomeActive){
+            application.applicationIconBadgeNumber = 1;
+            application.applicationIconBadgeNumber = 0;
+            NSLog("Clearing Notes");
+        }
     }
-    
+
     public func application(_ application: UIApplication, didRegister notificationSettings: UIUserNotificationSettings) {
        let settings:NSDictionary = [
             "sound": notificationSettings.types.contains(.sound),
             "badge": notificationSettings.types.contains(.badge),
             "alert": notificationSettings.types.contains(.alert)
         ];
-        
+
         _channel.invokeMethod("onIosSettingsRegistered", arguments: settings);
     }
 
-    
+
     public func application(_ application: UIApplication, didReceiveRemoteNotification userInfo: [AnyHashable : Any], fetchCompletionHandler completionHandler: @escaping (UIBackgroundFetchResult) -> Void) -> Bool {
         _channel.invokeMethod("onMessage", arguments: getParamters(userInfo: userInfo));
         completionHandler(.noData);
         return true;
     }
-    
+
     public func application(_ application: UIApplication, didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data) {
         var trimmedDeviceToken:String = "";
-        
+
         if #available(iOS 13.0, *) {
             trimmedDeviceToken = getStringFrom(deviceToken: deviceToken)
         }
         else {
             let token:NSData = NSData.init(data: deviceToken);
              trimmedDeviceToken = token.description;
-            
+
             if (!trimmedDeviceToken.isNullOrWhitespace())
             {
                 trimmedDeviceToken = trimmedDeviceToken.trimmingCharacters(in: CharacterSet.init(charactersIn:"<"));
@@ -133,12 +141,12 @@ public class SwiftPushNotificationPlugin: NSObject, FlutterPlugin, UNUserNotific
                 trimmedDeviceToken = trimmedDeviceToken.replacingOccurrences(of: " ", with: "");
             }
         }
-        
+
         if (!trimmedDeviceToken.isNullOrWhitespace()) {
           _channel.invokeMethod("onToken", arguments: trimmedDeviceToken);
         }
     }
-    
+
     private func getStringFrom(deviceToken: Data) -> String {
         var token = ""
         for i in 0..<deviceToken.count {
@@ -146,14 +154,14 @@ public class SwiftPushNotificationPlugin: NSObject, FlutterPlugin, UNUserNotific
         }
         return token
     }
-    
+
     private func getParamters(userInfo:[AnyHashable : Any]) -> [AnyHashable : Any] {
         return userInfo;
     }
-    
-  
+
+
     private func setupCategories(call: FlutterMethodCall, result: @escaping FlutterResult) {
-        
+
         if #available(iOS 10.0, *) {
             let args:NSArray = call.arguments as! NSArray;
 
@@ -161,50 +169,50 @@ public class SwiftPushNotificationPlugin: NSObject, FlutterPlugin, UNUserNotific
 
             args.forEach { (item: Any) in
                 let categoryItem:NSDictionary = item as! NSDictionary;
-                
+
                 let identifier:String = categoryItem["identifier"] as! String;
                 let intentIdentifiers:[String] = categoryItem["intentIdentifiers"] as! [String];
                 var hiddenPreviewBodyPlaceHolder:String?;
-                
+
                 if let placeholder = categoryItem["hiddenPreviewBodyPlaceHolder"] as? String  {
                     hiddenPreviewBodyPlaceHolder = placeholder;
                 }
-                
+
                 var actions:[UNNotificationAction] = [];
                 var options:UNNotificationCategoryOptions = [];
-                
+
                 if let categoryActions = categoryItem["actions"] as? [[AnyHashable : Any]]  {
                     categoryActions.forEach({ item in
                         let identifier:String = item["identifier"] as! String;
                         let title:String = item["title"] as! String;
                         var actionOptions:UNNotificationActionOptions = [];
-                        
+
                         if let actionActionOptions = item["options"] as? NSDictionary {
-                            
+
                             if(actionActionOptions["authenticationRequired"] as! Bool) {
                                 actionOptions = actionOptions.union(.authenticationRequired);
                             }
-                            
+
                             if(actionActionOptions["destructive"] as! Bool) {
                                 actionOptions = actionOptions.union(.destructive);
                             }
-                            
+
                             if(actionActionOptions["foreground"] as! Bool) {
                                 actionOptions = actionOptions.union(.foreground);
                             }
                         }
-                        
+
                         let action:UNNotificationAction = UNNotificationAction.init(identifier: identifier, title: title, options:actionOptions);
                         actions.append(action);
                     });
                 }
-                
+
                 if let categoryOption = categoryItem["options"] as! NSDictionary? {
-                    
+
                     if(categoryOption["customDismissAction"] as! Bool) {
                         options = options.union(.customDismissAction);
                     }
-                    
+
                     if(categoryOption["allowInCarPlay"] as! Bool) {
                         options = options.union(.allowInCarPlay);
                     }
@@ -213,7 +221,7 @@ public class SwiftPushNotificationPlugin: NSObject, FlutterPlugin, UNUserNotific
                         if(categoryOption["hiddenPreviewShowTitle"] as! Bool) {
                             options = options.union(.hiddenPreviewsShowTitle);
                         }
-                        
+
                         if(categoryOption["hiddenPreviewShowTitle"] as! Bool) {
                             options = options.union(.hiddenPreviewsShowSubtitle);
                         }
@@ -221,7 +229,7 @@ public class SwiftPushNotificationPlugin: NSObject, FlutterPlugin, UNUserNotific
                 }
 
                 var category:UNNotificationCategory;
-                
+
                 if #available(iOS 11.0, *) {
                     if(hiddenPreviewBodyPlaceHolder != nil) {
                         category = UNNotificationCategory.init(identifier: identifier, actions: actions, intentIdentifiers: intentIdentifiers, hiddenPreviewsBodyPlaceholder: hiddenPreviewBodyPlaceHolder!,  options: options);
@@ -233,19 +241,30 @@ public class SwiftPushNotificationPlugin: NSObject, FlutterPlugin, UNUserNotific
                 else {
                     category = UNNotificationCategory.init(identifier: identifier, actions: actions, intentIdentifiers: intentIdentifiers,  options: options);
                 }
-              
+
                 categories.insert(category);
             }
-            
+
             if(categories.count > 0) {
                 UNUserNotificationCenter.current().setNotificationCategories(categories);
             }
         }
-        
+
         result(nil);
     }
-    
+
+    private func reduceBadge(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        UIApplication.shared.applicationIconBadgeNumber = UIApplication.shared.applicationIconBadgeNumber - 1;
+
+        result(nil);
+    }
+
     private func configureMethods(call: FlutterMethodCall, result: @escaping FlutterResult) {
+        let args:NSDictionary = call.arguments as! NSDictionary;
+        let clear:Bool = args["clearOnOpen"] as! Bool;
+       _clearNotificationsOnApplicationBecomeActive = clear;
+
+
         if #available(iOS 10.0, *) {
             UIApplication.shared.registerForRemoteNotifications();
             

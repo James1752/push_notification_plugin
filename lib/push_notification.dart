@@ -67,7 +67,7 @@ class PushNotification {
     _onResume = onResume;
     _onOpen = onOpen;
     _channel.setMethodCallHandler(_handleMethod);
-    _channel.invokeMethod('configure');
+    _channel.invokeMethod('configure', <String, dynamic>{"clearOnOpen": false});
   }
 
   final StreamController<String> _tokenStreamController =
@@ -76,6 +76,10 @@ class PushNotification {
   /// Fires when a new FCM token is generated.
   Stream<String> get onTokenRefresh {
     return _tokenStreamController.stream;
+  }
+
+  void reduceBadge() {
+    _channel.invokeMethod('reduceBadge');
   }
 
   /// Returns the FCM token.
