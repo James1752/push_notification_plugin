@@ -80,6 +80,7 @@ class PushNotification {
     return _tokenStreamController.stream;
   }
 
+  /// This reduces the badge number by 1 --> Currently only works for IOS
   void reduceBadge() {
     _channel.invokeMethod('reduceBadge');
   }
