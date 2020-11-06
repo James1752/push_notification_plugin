@@ -61,13 +61,15 @@ class PushNotification {
     MessageHandler onLaunch,
     MessageHandler onResume,
     MessageHandler onOpen,
+    bool clearNotificationsOnOpen,
   }) {
     _onMessage = onMessage;
     _onLaunch = onLaunch;
     _onResume = onResume;
     _onOpen = onOpen;
     _channel.setMethodCallHandler(_handleMethod);
-    _channel.invokeMethod('configure', <String, dynamic>{"clearOnOpen": false});
+    _channel.invokeMethod('configure',
+        <String, dynamic>{"clearOnOpen": clearNotificationsOnOpen ?? true});
   }
 
   final StreamController<String> _tokenStreamController =
